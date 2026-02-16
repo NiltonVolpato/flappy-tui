@@ -1,0 +1,12 @@
+[package]
+name = "flappy-tui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+crossterm = "0.28"
+fundsp = "0.23.0"
+rodio = "0.21.1"
+
+[profile.release]
+opt-level = 3
