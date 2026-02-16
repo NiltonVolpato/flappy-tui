@@ -8,8 +8,6 @@ Set Width 600
 Set Height 750
 Set Shell zsh
 Hide
-Type "cargo build --release"
-Enter
 Type `export PATH="$PWD/target/release:$PATH"`
 Enter
 Type "export FLAPPY_SEED=42"
