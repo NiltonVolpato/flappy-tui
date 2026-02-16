@@ -361,37 +361,209 @@ fn draw_flappy_logo_flat(buf: &mut PixelBuf, x: i32, y: i32, s: i32, color: Rgb)
     }
 }
 
+/// 4x6 pixel font covering ASCII 32–127 (from font4x6.cpp).
+/// Each entry is 6 bytes (one per row), with the top 4 bits encoding the 4 columns.
+const FONT_4X6: [[u8; 6]; 96] = [
+    // 32 ' '
+    [0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+    // 33 '!'
+    [0x40, 0x40, 0x40, 0x00, 0x40, 0x00],
+    // 34 '"'
+    [0xA0, 0xA0, 0x00, 0x00, 0x00, 0x00],
+    // 35 '#'
+    [0xA0, 0xE0, 0xA0, 0xE0, 0xA0, 0x00],
+    // 36 '$'
+    [0xE0, 0xC0, 0x60, 0xE0, 0x40, 0x00],
+    // 37 '%'
+    [0xA0, 0x20, 0x40, 0x80, 0xA0, 0x00],
+    // 38 '&'
+    [0xC0, 0xC0, 0x00, 0xE0, 0xE0, 0x00],
+    // 39 '\''
+    [0x20, 0x40, 0x00, 0x00, 0x00, 0x00],
+    // 40 '('
+    [0x20, 0x40, 0x40, 0x40, 0x20, 0x00],
+    // 41 ')'
+    [0x80, 0x40, 0x40, 0x40, 0x80, 0x00],
+    // 42 '*'
+    [0x00, 0xA0, 0x40, 0xA0, 0x00, 0x00],
+    // 43 '+'
+    [0x00, 0x40, 0xE0, 0x40, 0x00, 0x00],
+    // 44 ','
+    [0x00, 0x00, 0x00, 0x00, 0x40, 0x40],
+    // 45 '-'
+    [0x00, 0x00, 0xE0, 0x00, 0x00, 0x00],
+    // 46 '.'
+    [0x00, 0x00, 0x00, 0x00, 0x40, 0x00],
+    // 47 '/'
+    [0x20, 0x40, 0x40, 0x40, 0x80, 0x00],
+    // 48 '0'
+    [0x40, 0xA0, 0xA0, 0xA0, 0x40, 0x00],
+    // 49 '1'
+    [0x40, 0xC0, 0x40, 0x40, 0x40, 0x00],
+    // 50 '2'
+    [0x40, 0xA0, 0x20, 0x40, 0xE0, 0x00],
+    // 51 '3'
+    [0xC0, 0x20, 0xC0, 0x20, 0xC0, 0x00],
+    // 52 '4'
+    [0x80, 0xA0, 0xE0, 0x20, 0x20, 0x00],
+    // 53 '5'
+    [0xE0, 0x80, 0x60, 0x20, 0xE0, 0x00],
+    // 54 '6'
+    [0x60, 0x80, 0xE0, 0xA0, 0xC0, 0x00],
+    // 55 '7'
+    [0xE0, 0x20, 0x40, 0x40, 0x40, 0x00],
+    // 56 '8'
+    [0x40, 0xA0, 0x40, 0xA0, 0x40, 0x00],
+    // 57 '9'
+    [0x60, 0xA0, 0xE0, 0x20, 0x40, 0x00],
+    // 58 ':'
+    [0x00, 0x40, 0x00, 0x00, 0x40, 0x00],
+    // 59 ';'
+    [0x00, 0x40, 0x00, 0x00, 0x40, 0x40],
+    // 60 '<'
+    [0x20, 0x40, 0x80, 0x40, 0x20, 0x00],
+    // 61 '='
+    [0x00, 0xE0, 0x00, 0xE0, 0x00, 0x00],
+    // 62 '>'
+    [0x80, 0x40, 0x20, 0x40, 0x80, 0x00],
+    // 63 '?'
+    [0xE0, 0x20, 0x40, 0x00, 0x40, 0x00],
+    // 64 '@'
+    [0x40, 0xA0, 0xA0, 0x80, 0x60, 0x00],
+    // 65 'A'
+    [0x40, 0xA0, 0xA0, 0xE0, 0xA0, 0x00],
+    // 66 'B'
+    [0xC0, 0xA0, 0xC0, 0xA0, 0xC0, 0x00],
+    // 67 'C'
+    [0x40, 0xA0, 0x80, 0xA0, 0x40, 0x00],
+    // 68 'D'
+    [0xC0, 0xA0, 0xA0, 0xA0, 0xC0, 0x00],
+    // 69 'E'
+    [0xE0, 0x80, 0xC0, 0x80, 0xE0, 0x00],
+    // 70 'F'
+    [0xE0, 0x80, 0xE0, 0x80, 0x80, 0x00],
+    // 71 'G'
+    [0x60, 0x80, 0x80, 0xA0, 0x60, 0x00],
+    // 72 'H'
+    [0xA0, 0xA0, 0xE0, 0xA0, 0xA0, 0x00],
+    // 73 'I'
+    [0xE0, 0x40, 0x40, 0x40, 0xE0, 0x00],
+    // 74 'J'
+    [0xE0, 0x20, 0x20, 0xA0, 0x40, 0x00],
+    // 75 'K'
+    [0xA0, 0xA0, 0xC0, 0xA0, 0xA0, 0x00],
+    // 76 'L'
+    [0x80, 0x80, 0x80, 0x80, 0xE0, 0x00],
+    // 77 'M'
+    [0xA0, 0xE0, 0xE0, 0xA0, 0xA0, 0x00],
+    // 78 'N'
+    [0xC0, 0xA0, 0xA0, 0xA0, 0xA0, 0x00],
+    // 79 'O'
+    [0x40, 0xA0, 0xA0, 0xA0, 0x40, 0x00],
+    // 80 'P'
+    [0xC0, 0xA0, 0xC0, 0x80, 0x80, 0x00],
+    // 81 'Q'
+    [0x40, 0xA0, 0xA0, 0xA0, 0x40, 0x20],
+    // 82 'R'
+    [0xC0, 0xA0, 0xC0, 0xA0, 0xA0, 0x00],
+    // 83 'S'
+    [0x60, 0x80, 0x40, 0x20, 0xC0, 0x00],
+    // 84 'T'
+    [0xE0, 0x40, 0x40, 0x40, 0x40, 0x00],
+    // 85 'U'
+    [0xA0, 0xA0, 0xA0, 0xA0, 0xE0, 0x00],
+    // 86 'V'
+    [0xA0, 0xA0, 0xA0, 0xA0, 0x40, 0x00],
+    // 87 'W'
+    [0xA0, 0xA0, 0xE0, 0xE0, 0xA0, 0x00],
+    // 88 'X'
+    [0xA0, 0xA0, 0x40, 0xA0, 0xA0, 0x00],
+    // 89 'Y'
+    [0xA0, 0xA0, 0xE0, 0x40, 0x40, 0x00],
+    // 90 'Z'
+    [0xE0, 0x20, 0x40, 0x80, 0xE0, 0x00],
+    // 91 '['
+    [0x60, 0x40, 0x40, 0x40, 0x60, 0x00],
+    // 92 '\\'
+    [0x80, 0x80, 0x40, 0x20, 0x20, 0x00],
+    // 93 ']'
+    [0x60, 0x20, 0x20, 0x20, 0x60, 0x00],
+    // 94 '^'
+    [0x00, 0x40, 0xA0, 0x00, 0x00, 0x00],
+    // 95 '_'
+    [0x00, 0x00, 0x00, 0x00, 0xE0, 0x00],
+    // 96 '`'
+    [0x00, 0x40, 0x20, 0x00, 0x00, 0x00],
+    // 97 'a'
+    [0x00, 0x60, 0xA0, 0xA0, 0x60, 0x00],
+    // 98 'b'
+    [0x80, 0xC0, 0xA0, 0xA0, 0x40, 0x00],
+    // 99 'c'
+    [0x00, 0x60, 0x80, 0x80, 0x60, 0x00],
+    // 100 'd'
+    [0x20, 0x60, 0xA0, 0xA0, 0x40, 0x00],
+    // 101 'e'
+    [0x00, 0x60, 0xE0, 0x80, 0xE0, 0x00],
+    // 102 'f'
+    [0x40, 0xA0, 0x80, 0xC0, 0x80, 0x00],
+    // 103 'g'
+    [0x00, 0x40, 0xA0, 0x40, 0x20, 0x40],
+    // 104 'h'
+    [0x80, 0xC0, 0xA0, 0xA0, 0xA0, 0x00],
+    // 105 'i'
+    [0x40, 0x00, 0x40, 0x40, 0x40, 0x00],
+    // 106 'j'
+    [0x40, 0x00, 0x40, 0x40, 0x40, 0x80],
+    // 107 'k'
+    [0x80, 0xA0, 0xA0, 0xC0, 0xA0, 0x00],
+    // 108 'l'
+    [0xC0, 0x40, 0x40, 0x40, 0x40, 0x00],
+    // 109 'm'
+    [0x00, 0xE0, 0xE0, 0xA0, 0xA0, 0x00],
+    // 110 'n'
+    [0x00, 0xC0, 0xA0, 0xA0, 0xA0, 0x00],
+    // 111 'o'
+    [0x00, 0x40, 0xA0, 0xA0, 0x40, 0x00],
+    // 112 'p'
+    [0x00, 0xC0, 0xA0, 0xA0, 0xC0, 0x80],
+    // 113 'q'
+    [0x00, 0x60, 0xA0, 0xA0, 0x60, 0x20],
+    // 114 'r'
+    [0x00, 0x60, 0x80, 0x80, 0x80, 0x00],
+    // 115 's'
+    [0x00, 0x60, 0x80, 0x20, 0xC0, 0x00],
+    // 116 't'
+    [0x40, 0xE0, 0x40, 0x40, 0x40, 0x00],
+    // 117 'u'
+    [0x00, 0xA0, 0xA0, 0xA0, 0x60, 0x00],
+    // 118 'v'
+    [0x00, 0xA0, 0xA0, 0xA0, 0x40, 0x00],
+    // 119 'w'
+    [0x00, 0xA0, 0xA0, 0xE0, 0xE0, 0x00],
+    // 120 'x'
+    [0x00, 0xA0, 0x40, 0x40, 0xA0, 0x00],
+    // 121 'y'
+    [0x00, 0xA0, 0xA0, 0x60, 0x20, 0x40],
+    // 122 'z'
+    [0x00, 0xE0, 0x20, 0x80, 0xE0, 0x00],
+    // 123 '{'
+    [0x20, 0x40, 0xC0, 0x40, 0x20, 0x00],
+    // 124 '|'
+    [0x40, 0x40, 0x40, 0x40, 0x40, 0x00],
+    // 125 '}'
+    [0x80, 0x40, 0x60, 0x40, 0x80, 0x00],
+    // 126 '~'
+    [0x00, 0x50, 0xA0, 0x00, 0x00, 0x00],
+    // 127 DEL (blank)
+    [0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+];
+
 fn glyph_4x6(ch: char) -> [u8; 6] {
-    match ch {
-        'A' => [
-            0b01000000, 0b10100000, 0b10100000, 0b11100000, 0b10100000, 0b00000000,
-        ],
-        'C' => [
-            0b01000000, 0b10100000, 0b10000000, 0b10100000, 0b01000000, 0b00000000,
-        ],
-        'E' => [
-            0b11100000, 0b10000000, 0b11000000, 0b10000000, 0b11100000, 0b00000000,
-        ],
-        'F' => [
-            0b11100000, 0b10000000, 0b11100000, 0b10000000, 0b10000000, 0b00000000,
-        ],
-        'L' => [
-            0b10000000, 0b10000000, 0b10000000, 0b10000000, 0b11100000, 0b00000000,
-        ],
-        'O' => [
-            0b01000000, 0b10100000, 0b10100000, 0b10100000, 0b01000000, 0b00000000,
-        ],
-        'P' => [
-            0b11000000, 0b10100000, 0b11000000, 0b10000000, 0b10000000, 0b00000000,
-        ],
-        'S' => [
-            0b01100000, 0b10000000, 0b01000000, 0b00100000, 0b11000000, 0b00000000,
-        ],
-        'T' => [
-            0b11100000, 0b01000000, 0b01000000, 0b01000000, 0b01000000, 0b00000000,
-        ],
-        ' ' => [0; 6],
-        _ => [0; 6],
+    let code = ch as u32;
+    if (32..128).contains(&code) {
+        FONT_4X6[(code - 32) as usize]
+    } else {
+        [0; 6]
     }
 }
 
@@ -456,6 +628,8 @@ struct Game {
     ground_x: f64,
     dead_timer: u32,
     show_hud: bool,
+    rng_state: u64,
+    forced_seed: Option<u64>,
     // Derived
     scale: f64,
     ground_h: usize,
@@ -488,6 +662,8 @@ impl Game {
             ground_x: 0.0,
             dead_timer: 0,
             show_hud: false,
+            rng_state: 0,
+            forced_seed: None,
             scale,
             ground_h,
             pipe_w,
@@ -505,8 +681,18 @@ impl Game {
     fn resize(&mut self, pw: usize, ph: usize) {
         *self = Game {
             best: self.best,
+            forced_seed: self.forced_seed,
             ..Game::new(pw, ph)
         };
+    }
+
+    fn next_rand(&mut self) -> f64 {
+        self.rng_state = self
+            .rng_state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let bits = (self.rng_state >> 33) ^ self.rng_state;
+        (bits % 1000) as f64 / 1000.0
     }
 
     fn sky_h(&self) -> usize {
@@ -517,6 +703,7 @@ impl Game {
         match self.state {
             State::Ready => {
                 self.state = State::Playing;
+                self.rng_state = self.forced_seed.unwrap_or(self.frame);
                 self.bird_vy = self.flap_vel;
                 Some(GameEvent::Flap)
             }
@@ -556,7 +743,7 @@ impl Game {
                     let sky = self.sky_h() as f64;
                     let margin = self.pipe_gap as f64 * 0.7;
                     let range = sky - margin * 2.0;
-                    let center = margin + pseudo_rand(self.frame) * range;
+                    let center = margin + self.next_rand() * range;
                     self.pipes.push(Pipe {
                         x: self.pw as f64 + 2.0,
                         gap_center: center,
@@ -782,8 +969,14 @@ impl Game {
             }
         }
 
-        // Wing
-        let wing_y_off = if self.frame % 8 < 4 { -1 } else { 1 };
+        // Wing (stop flapping when dying/dead)
+        let wing_y_off = if self.state == State::Dying || self.state == State::Dead {
+            1
+        } else if self.frame % 8 < 4 {
+            -1
+        } else {
+            1
+        };
         let wing_h = (1.5 * s).max(1.0) as i32;
         let wing_w = (2.0 * s).max(1.0) as i32;
         buf.fill_rect(
@@ -909,8 +1102,8 @@ impl Game {
     fn draw_game_over(&self, buf: &mut PixelBuf) {
         let cx = self.pw as i32 / 2;
         let cy = self.ph as i32 / 2;
-        let panel_w = (40.0 * self.scale).max(30.0) as i32;
-        let panel_h = (20.0 * self.scale).max(16.0) as i32;
+        let panel_w = (30.0 * self.scale).max(30.0).min(50.0) as i32;
+        let panel_h = (20.0 * self.scale).max(24.0).min(36.0) as i32;
 
         // Dark overlay
         for y in 0..self.ph {
@@ -927,11 +1120,21 @@ impl Game {
         buf.fill_rect(px, py, panel_w, panel_h, DIRT);
         buf.fill_rect(px + 1, py + 1, panel_w - 2, panel_h - 2, Rgb(220, 195, 120));
 
-        // Score
-        draw_number(buf, cx, py + 4, self.score, WHITE);
+        // "SCORE" label + value
+        let label_color = Rgb(80, 60, 20);
+        let score_label = "SCORE";
+        let score_label_w = text_width_4x6(score_label, 1);
+        draw_text_4x6(buf, cx - score_label_w / 2, py + 3, score_label, label_color, 1);
+        draw_number(buf, cx, py + 11, self.score, WHITE);
 
-        // Best
-        draw_number(buf, cx, py + 12, self.best, BIRD_Y);
+        // Divider line
+        buf.fill_rect(px + 3, py + panel_h / 2, panel_w - 6, 1, label_color);
+
+        // "BEST" label + value
+        let best_label = "BEST";
+        let best_label_w = text_width_4x6(best_label, 1);
+        draw_text_4x6(buf, cx - best_label_w / 2, py + panel_h / 2 + 2, best_label, label_color, 1);
+        draw_number(buf, cx, py + panel_h / 2 + 10, self.best, BIRD_Y);
     }
 }
 
@@ -951,17 +1154,13 @@ fn pipe_shade(x: i32, total_w: i32) -> Rgb {
     }
 }
 
-fn pseudo_rand(seed: u64) -> f64 {
-    let x = seed
-        .wrapping_mul(6364136223846793005)
-        .wrapping_add(1442695040888963407);
-    let bits = (x >> 33) ^ x;
-    (bits % 1000) as f64 / 1000.0
-}
-
 // ── Main ────────────────────────────────────────────────────────────────────
 
 fn main() -> io::Result<()> {
+    let forced_seed: Option<u64> = std::env::var("FLAPPY_SEED")
+        .ok()
+        .and_then(|s| s.parse().ok());
+
     terminal::enable_raw_mode()?;
     let mut out = stdout();
     execute!(
@@ -987,6 +1186,7 @@ fn main() -> io::Result<()> {
 
     let mut buf = PixelBuf::new(pw, ph);
     let mut game = Game::new(pw, ph);
+    game.forced_seed = forced_seed;
     let audio = Audio::new().ok();
 
     let frame_dur = Duration::from_millis(33); // ~30 fps
