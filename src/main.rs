@@ -894,8 +894,8 @@ impl Game {
         let box_x = cx - box_w / 2;
         let box_y = cy + title_h + 4;
 
-        buf.fill_rect(box_x - 1, box_y - 1, box_w + 2, box_h + 2, SHADOW);
-        buf.fill_rect(box_x, box_y, box_w, box_h, WHITE);
+        buf.fill_rect(box_x - 1, box_y - 1, box_w + 2, box_h + 1, SHADOW);
+        buf.fill_rect(box_x, box_y, box_w, box_h - 1, WHITE);
         draw_text_4x6(
             buf,
             box_x + pad_x,
