@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 crossterm = "0.28"
+fundsp = "0.23.0"
 rodio = "0.20.1"
 
 [profile.release]
