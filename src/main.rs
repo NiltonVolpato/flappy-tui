@@ -5,34 +5,217 @@ use crossterm::{
     style::{self, Color as CColor},
     terminal,
 };
-use fundsp::{hpc::*, prelude::*};
-use rodio::{self, Sink, mixer::Mixer};
+use rodio::{OutputStream, OutputStreamHandle, Sink, buffer::SamplesBuffer};
+use std::f32::consts::TAU;
 use std::io::{self, Write, stdout};
 use std::time::{Duration, Instant};
 
 // ── Sounds ──────────────────────────────────────────────────────────────────
+const SAMPLE_RATE: u32 = 44_100;
+const DEATH_DURATION: f32 = 0.5;
 
-fn play_death(mixer: &Mixer) {
-    let sink = Sink::connect_new(mixer);
+struct Audio {
+    _stream: OutputStream,
+    handle: OutputStreamHandle,
+}
 
-    // 1. Create the Frequency Ramp (400Hz to 80Hz over 0.4s)
-    let freq = lfo(|t: f64| lerp11(400.0, 80.0, (t / 0.4).min(1.0)));
+impl Audio {
+    fn new() -> Result<Self, rodio::StreamError> {
+        let (stream, handle) = OutputStream::try_default()?;
+        Ok(Self {
+            _stream: stream,
+            handle,
+        })
+    }
+}
 
-    // 2. Create the Gain Ramp (0.15 to 0.0 over 0.5s)
-    let gain = lfo(|t: f64| lerp11(0.15, 0.0, (t / 0.5).min(1.0)));
+fn play_death(audio: &Audio) {
+    let samples = generate_death_samples(SAMPLE_RATE, DEATH_DURATION);
+    play_samples(audio, samples);
+}
 
-    // 3. Connect: freq >> sawtooth * gain
-    // This is the equivalent of: o.connect(g).connect(destination)
-    let sound = freq >> saw() >> mul(gain);
+fn play_flap(audio: &Audio) {
+    let samples = generate_flap_samples(SAMPLE_RATE);
+    play_samples(audio, samples);
+}
 
-    // 4. Wrap in a Rodio-compatible source
-    // fundsp uses 44.1kHz by default
-    let source = rodio::source::from_iter(sound.take(44100 * 0.5))
-        .convert_samples::<f32>()
-        .periodic_samples(Duration::from_secs_f32(1.0 / 44100.0), 1);
+fn play_score(audio: &Audio) {
+    let samples = generate_score_samples(SAMPLE_RATE);
+    play_samples(audio, samples);
+}
 
-    sink.append(source);
-    sink.detach(); // Play in background
+fn play_whoosh(audio: &Audio) {
+    let samples = generate_whoosh_samples(SAMPLE_RATE);
+    play_samples(audio, samples);
+}
+
+fn play_samples(audio: &Audio, samples: Vec<f32>) {
+    if let Ok(sink) = Sink::try_new(&audio.handle) {
+        let source = SamplesBuffer::new(1, SAMPLE_RATE, samples);
+        sink.append(source);
+        sink.detach();
+    }
+}
+
+fn generate_death_samples(sample_rate: u32, duration: f32) -> Vec<f32> {
+    let total_samples = (sample_rate as f32 * duration) as usize;
+    let mut samples = Vec::with_capacity(total_samples);
+    let mut phase = 0.0f32;
+    let sr = sample_rate as f32;
+
+    for i in 0..total_samples {
+        let t = i as f32 / sr;
+        let freq = lerp_f32(400.0, 80.0, (t / 0.4).min(1.0));
+        let amp = lerp_f32(0.15, 0.0, (t / duration).min(1.0));
+
+        phase += freq / sr;
+        if phase >= 1.0 {
+            phase -= phase.floor();
+        }
+
+        let sample = (phase * 2.0 - 1.0) * amp;
+        samples.push(sample);
+    }
+
+    samples
+}
+
+fn lerp_f32(start: f32, end: f32, t: f32) -> f32 {
+    start + (end - start) * t
+}
+
+fn exp_ramp(start: f32, end: f32, t: f32) -> f32 {
+    if start <= 0.0 || end <= 0.0 {
+        return lerp_f32(start, end, t);
+    }
+    let ratio = end / start;
+    start * ratio.powf(t.clamp(0.0, 1.0))
+}
+
+fn generate_flap_samples(sample_rate: u32) -> Vec<f32> {
+    let duration = 0.12f32;
+    let freq_ramp = 0.08f32;
+    let total_samples = (sample_rate as f32 * duration) as usize;
+    let mut samples = Vec::with_capacity(total_samples);
+    let mut phase = 0.0f32;
+    let sr = sample_rate as f32;
+
+    for i in 0..total_samples {
+        let t = i as f32 / sr;
+        let freq_t = (t / freq_ramp).clamp(0.0, 1.0);
+        let freq = if t < freq_ramp {
+            exp_ramp(400.0, 800.0, freq_t)
+        } else {
+            800.0
+        };
+        let amp = exp_ramp(0.15, 0.001, t / duration);
+
+        phase += freq / sr;
+        if phase >= 1.0 {
+            phase -= phase.floor();
+        }
+
+        samples.push((phase * TAU).sin() * amp);
+    }
+
+    samples
+}
+
+fn generate_score_samples(sample_rate: u32) -> Vec<f32> {
+    const NOTES: [f32; 2] = [520.0, 680.0];
+    let note_gap = 0.1f32;
+    let note_len = 0.15f32;
+    let total_duration = note_gap * (NOTES.len() as f32 - 1.0) + note_len;
+    let total_samples = (sample_rate as f32 * total_duration) as usize;
+    let sr = sample_rate as f32;
+    let mut samples = vec![0.0f32; total_samples];
+
+    for (idx, freq) in NOTES.iter().enumerate() {
+        let start_t = note_gap * idx as f32;
+        let start_idx = (start_t * sr) as usize;
+        let mut phase = 0.0f32;
+        for i in 0..(note_len * sr) as usize {
+            let t = i as f32 / sr;
+            let amp = exp_ramp(0.12, 0.001, t / note_len);
+            phase += freq / sr;
+            if phase >= 1.0 {
+                phase -= phase.floor();
+            }
+            let sample = (phase * TAU).sin() * amp;
+            let target = start_idx + i;
+            if target < samples.len() {
+                samples[target] += sample;
+            }
+        }
+    }
+
+    samples
+}
+
+fn generate_whoosh_samples(sample_rate: u32) -> Vec<f32> {
+    let duration = 0.08f32;
+    let total_samples = (sample_rate as f32 * duration) as usize;
+    let mut samples = Vec::with_capacity(total_samples);
+    let mut rng = 0x1234_5678u32;
+    let sr = sample_rate as f32;
+
+    let mut filter = Biquad::bandpass(sample_rate as f32, 1200.0, 0.5);
+
+    for i in 0..total_samples {
+        let t = i as f32 / sr;
+        rng ^= rng << 13;
+        rng ^= rng >> 17;
+        rng ^= rng << 5;
+        let noise = (rng as f32 / u32::MAX as f32) * 2.0 - 1.0;
+        let filtered = filter.process(noise * 0.1);
+        let amp = exp_ramp(0.3, 0.001, t / duration);
+        samples.push(filtered * amp);
+    }
+
+    samples
+}
+
+struct Biquad {
+    b0: f32,
+    b1: f32,
+    b2: f32,
+    a1: f32,
+    a2: f32,
+    z1: f32,
+    z2: f32,
+}
+
+impl Biquad {
+    fn bandpass(sample_rate: f32, freq: f32, q: f32) -> Self {
+        let omega = TAU * freq / sample_rate;
+        let sin_omega = omega.sin();
+        let cos_omega = omega.cos();
+        let alpha = sin_omega / (2.0 * q.max(0.001));
+
+        let b0 = alpha;
+        let b1 = 0.0;
+        let b2 = -alpha;
+        let a0 = 1.0 + alpha;
+        let a1 = -2.0 * cos_omega;
+        let a2 = 1.0 - alpha;
+
+        Self {
+            b0: b0 / a0,
+            b1: b1 / a0,
+            b2: b2 / a0,
+            a1: a1 / a0,
+            a2: a2 / a0,
+            z1: 0.0,
+            z2: 0.0,
+        }
+    }
+
+    fn process(&mut self, input: f32) -> f32 {
+        let out = self.b0 * input + self.z1;
+        self.z1 = self.b1 * input + self.z2 - self.a1 * out;
+        self.z2 = self.b2 * input - self.a2 * out;
+        out
+    }
 }
 
 // ── Colors ──────────────────────────────────────────────────────────────────
@@ -240,6 +423,13 @@ enum State {
     Dead,
 }
 
+enum GameEvent {
+    Flap,
+    Score,
+    Whoosh,
+    Death,
+}
+
 struct Game {
     pw: usize, // pixel width
     ph: usize, // pixel height
@@ -310,26 +500,30 @@ impl Game {
         self.ph - self.ground_h
     }
 
-    fn flap(&mut self) {
+    fn flap(&mut self) -> Option<GameEvent> {
         match self.state {
             State::Ready => {
                 self.state = State::Playing;
                 self.bird_vy = self.flap_vel;
+                Some(GameEvent::Flap)
             }
             State::Playing => {
                 self.bird_vy = self.flap_vel;
+                Some(GameEvent::Flap)
             }
             State::Dead => {
                 let best = self.best;
                 self.resize(self.pw, self.ph);
                 self.best = best;
+                None
             }
-            State::Dying => {}
+            State::Dying => None,
         }
     }
 
-    fn update(&mut self) {
+    fn update(&mut self) -> Vec<GameEvent> {
         self.frame += 1;
+        let mut events = Vec::new();
 
         match self.state {
             State::Ready => {
@@ -355,6 +549,7 @@ impl Game {
                         gap_center: center,
                         scored: false,
                     });
+                    events.push(GameEvent::Whoosh);
                 }
 
                 // Move pipes
@@ -363,6 +558,7 @@ impl Game {
                     if !p.scored && p.x + (self.pipe_w as f64) < self.bird_x {
                         p.scored = true;
                         self.score += 1;
+                        events.push(GameEvent::Score);
                     }
                 }
                 self.pipes.retain(|p| p.x + self.pipe_w as f64 + 5.0 > 0.0);
@@ -374,6 +570,7 @@ impl Game {
                     if self.score > self.best {
                         self.best = self.score;
                     }
+                    events.push(GameEvent::Death);
                 }
             }
             State::Dying => {
@@ -389,6 +586,7 @@ impl Game {
                 self.dead_timer += 1;
             }
         }
+        events
     }
 
     fn check_collision(&self) -> bool {
@@ -747,11 +945,14 @@ fn main() -> io::Result<()> {
 
     let mut buf = PixelBuf::new(pw, ph);
     let mut game = Game::new(pw, ph);
+    let audio = Audio::new().ok();
 
     let frame_dur = Duration::from_millis(33); // ~30 fps
+    let mut event_buf = Vec::new();
 
     loop {
         let frame_start = Instant::now();
+        event_buf.clear();
 
         // Input
         while event::poll(Duration::ZERO)? {
@@ -762,7 +963,9 @@ fn main() -> io::Result<()> {
                         return Ok(());
                     }
                     KeyCode::Char(' ') | KeyCode::Up | KeyCode::Enter => {
-                        game.flap();
+                        if let Some(event) = game.flap() {
+                            event_buf.push(event);
+                        }
                     }
                     // Tuning: a/z = gravity, s/x = flap, d/c = speed
                     KeyCode::Char('a') => game.tune_gravity(0.02),
@@ -784,7 +987,20 @@ fn main() -> io::Result<()> {
         }
 
         // Update
-        game.update();
+        event_buf.extend(game.update());
+
+        if let Some(audio) = audio.as_ref() {
+            for event in event_buf.drain(..) {
+                match event {
+                    GameEvent::Flap => play_flap(audio),
+                    GameEvent::Score => play_score(audio),
+                    GameEvent::Whoosh => play_whoosh(audio),
+                    GameEvent::Death => play_death(audio),
+                }
+            }
+        } else {
+            event_buf.clear();
+        }
 
         // Render
         game.draw(&mut buf);
