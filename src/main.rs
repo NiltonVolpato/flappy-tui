@@ -308,6 +308,118 @@ fn draw_number(buf: &mut PixelBuf, cx: i32, y: i32, n: u32, fg: Rgb) {
     }
 }
 
+const FLAPPY_LOGO: [&str; 7] = [
+    " XXXXXXXXX  XXXX         XXXXXXXXX   XXXXXXXXX   XXXXXXXXX  XXX      XXX",
+    "XXXXXXXXXXX XXXX        XXXXXXXXXXX XXXXXXXXXXX XXXXXXXXXXX XXXX    XXXX",
+    "XXXX        XXXX        XXXX   XXXX XXXX   XXXX XXXX   XXXX  XXXX  XXXX",
+    "XXXXXXXX    XXXX        XXXXXXXXXXX XXXXXXXXXXX XXXXXXXXXXX   XXXXXXXX",
+    "XXXXXXXX    XXXX        XXXXXXXXXXX XXXXXXXXXX  XXXXXXXXXX      XXXX",
+    "XXXX        XXXXXXXXXXX XXXX   XXXX XXXX        XXXX            XXXX",
+    "XXXX         XXXXXXXXXX XXXX   XXXX XXXX        XXXX            XXXX",
+];
+
+const FLAPPY_LETTER_PITCH: i32 = 12;
+const FLAPPY_LETTER_GAP: i32 = 2;
+const FLAPPY_LETTER_COUNT: i32 = 6;
+
+fn flappy_logo_width(scale: i32) -> i32 {
+    let s = scale.max(1);
+    let base = FLAPPY_LOGO[0].chars().count() as i32 * s;
+    let extra = (FLAPPY_LETTER_COUNT - 1) * FLAPPY_LETTER_GAP * s;
+    base + extra
+}
+
+fn draw_flappy_logo(buf: &mut PixelBuf, x: i32, y: i32, scale: i32) {
+    let s = scale.max(1);
+
+    draw_flappy_logo_flat(buf, x - 1, y - 1, s, SHADOW);
+    draw_flappy_logo_flat(buf, x, y - 1, s, SHADOW);
+    draw_flappy_logo_flat(buf, x + 2, y, s, SHADOW);
+    draw_flappy_logo_flat(buf, x, y + 2, s, SHADOW);
+    draw_flappy_logo_flat(buf, x + 2, y + 2, s, SHADOW);
+
+    // First pass: light yellow.
+    draw_flappy_logo_flat(buf, x, y, s, BIRD_HI);
+
+    // Second pass: darker yellow offset for a 3D look.
+    draw_flappy_logo_flat(buf, x + 1, y + 1, s, BIRD_Y);
+}
+
+fn draw_flappy_logo_flat(buf: &mut PixelBuf, x: i32, y: i32, s: i32, color: Rgb) {
+    // Draw each source row as two pixel rows (sub-pixel friendly).
+    for (row, line) in FLAPPY_LOGO.iter().enumerate() {
+        for (col, ch) in line.chars().enumerate() {
+            if ch == 'X' {
+                let col_i32 = col as i32;
+                let letter_idx = (col_i32 / FLAPPY_LETTER_PITCH).clamp(0, FLAPPY_LETTER_COUNT - 1);
+                let px = x + col_i32 * s + letter_idx * FLAPPY_LETTER_GAP * s;
+                let py = y + row as i32 * (2 * s);
+                buf.fill_rect(px, py, s, s, color);
+                buf.fill_rect(px, py + s, s, s, color);
+            }
+        }
+    }
+}
+
+fn glyph_4x6(ch: char) -> [u8; 6] {
+    match ch {
+        'A' => [
+            0b01000000, 0b10100000, 0b10100000, 0b11100000, 0b10100000, 0b00000000,
+        ],
+        'C' => [
+            0b01000000, 0b10100000, 0b10000000, 0b10100000, 0b01000000, 0b00000000,
+        ],
+        'E' => [
+            0b11100000, 0b10000000, 0b11000000, 0b10000000, 0b11100000, 0b00000000,
+        ],
+        'F' => [
+            0b11100000, 0b10000000, 0b11100000, 0b10000000, 0b10000000, 0b00000000,
+        ],
+        'L' => [
+            0b10000000, 0b10000000, 0b10000000, 0b10000000, 0b11100000, 0b00000000,
+        ],
+        'O' => [
+            0b01000000, 0b10100000, 0b10100000, 0b10100000, 0b01000000, 0b00000000,
+        ],
+        'P' => [
+            0b11000000, 0b10100000, 0b11000000, 0b10000000, 0b10000000, 0b00000000,
+        ],
+        'S' => [
+            0b01100000, 0b10000000, 0b01000000, 0b00100000, 0b11000000, 0b00000000,
+        ],
+        'T' => [
+            0b11100000, 0b01000000, 0b01000000, 0b01000000, 0b01000000, 0b00000000,
+        ],
+        ' ' => [0; 6],
+        _ => [0; 6],
+    }
+}
+
+fn text_width_4x6(text: &str, scale: i32) -> i32 {
+    if text.is_empty() {
+        0
+    } else {
+        (text.chars().count() as i32 * 5 - 1) * scale.max(1)
+    }
+}
+
+fn draw_text_4x6(buf: &mut PixelBuf, x: i32, y: i32, text: &str, color: Rgb, scale: i32) {
+    let s = scale.max(1);
+    let mut cursor_x = x;
+
+    for ch in text.chars() {
+        let rows = glyph_4x6(ch);
+        for (row, bits) in rows.iter().enumerate() {
+            for col in 0..4 {
+                if ((bits >> (7 - col)) & 1) == 1 {
+                    buf.fill_rect(cursor_x + col * s, y + row as i32 * s, s, s, color);
+                }
+            }
+        }
+        cursor_x += 5 * s;
+    }
+}
+
 // ── Game ────────────────────────────────────────────────────────────────────
 
 struct Pipe {
@@ -637,19 +749,38 @@ impl Game {
         // Determine tilt for visual (shift pixels up/down)
         let tilt = (self.bird_vy / (3.0 * s)).clamp(-1.0, 1.0) as i32;
 
-        // Body core
+        // Body: square with cut corners (chamfered rectangle)
         let bw = (3.0 * s).max(2.0) as i32;
         let bh = (2.0 * s).max(2.0) as i32;
-        buf.fill_rect(cx - bw, cy - bh, bw * 2 + 1, bh * 2, BIRD_Y);
+        let body_top = cy - bh;
+        let total_h = bh * 2;
+        let corner = (1.0 * s).max(1.0) as i32; // how many rows to chamfer
+        for row in 0..total_h {
+            let y = body_top + row;
+            // Cut corners: reduce width in the first/last `corner` rows
+            let inset = if row < corner {
+                corner - row
+            } else if row >= total_h - corner {
+                row - (total_h - corner) + 1
+            } else {
+                0
+            };
+            let half_w = bw - inset;
+            if half_w > 0 {
+                buf.fill_rect(cx - half_w, y, half_w * 2 + 1, 1, BIRD_Y);
+            }
+        }
 
-        // Highlight (top of body)
-        buf.fill_rect(
-            cx - bw + 1,
-            cy - bh,
-            bw * 2 - 2,
-            1.max((s * 0.8) as i32),
-            BIRD_HI,
-        );
+        // Highlight (top rows of body)
+        let hi_rows = 1.max((s * 0.8) as i32);
+        for row in 1..(1 + hi_rows).min(total_h / 2) {
+            let y = body_top + row;
+            let inset = if row < corner { corner - row } else { 0 };
+            let half_w = bw - inset - 1;
+            if half_w > 0 {
+                buf.fill_rect(cx - half_w, y, half_w * 2 + 1, 1, BIRD_HI);
+            }
+        }
 
         // Wing
         let wing_y_off = if self.frame % 8 < 4 { -1 } else { 1 };
@@ -673,19 +804,26 @@ impl Game {
             buf.set(ex + eye_r - 1, ey + eye_r, BIRD_PUPIL);
         }
 
-        // Beak
+        // Beak as an isosceles triangle: base on the left, point at center-right
         let beak_x = cx + bw;
-        let beak_y = cy - (0.5 * s) as i32 + tilt;
         let beak_w = (2.5 * s).max(2.0) as i32;
-        let beak_h = (1.5 * s).max(1.0) as i32;
-        buf.fill_rect(beak_x, beak_y, beak_w, beak_h / 2 + 1, BIRD_BEAK_HI);
-        buf.fill_rect(
-            beak_x,
-            beak_y + beak_h / 2 + 1,
-            beak_w,
-            beak_h / 2,
-            BIRD_BEAK,
-        );
+        let beak_half_h = (0.75 * s).max(1.0) as i32;
+        let beak_total_h = beak_half_h * 2 + 1;
+        let beak_center_y = cy + tilt;
+        let beak_top = beak_center_y - beak_half_h;
+        for row in 0..beak_total_h {
+            // Distance from center row: 0 at center, beak_half_h at edges
+            let dist = (row - beak_half_h).abs();
+            // Full width at center (dist=0), narrows to 1 at edges
+            let frac = 1.0 - dist as f64 / (beak_half_h + 1) as f64;
+            let w = (frac * beak_w as f64).max(1.0) as i32;
+            let color = if row <= beak_half_h {
+                BIRD_BEAK_HI
+            } else {
+                BIRD_BEAK
+            };
+            buf.fill_rect(beak_x, beak_top + row, w, 1, color);
+        }
 
         // Tail
         let tail_w = (1.5 * s).max(1.0) as i32;
@@ -736,33 +874,36 @@ impl Game {
 
     fn draw_title(&self, buf: &mut PixelBuf) {
         let cx = self.pw as i32 / 2;
-        let cy = self.ph as i32 / 4;
-        // "FLAP" in big blocky letters
-        let text = "FLAPPY";
-        let char_w = (4.0 * self.scale) as i32;
-        let char_h = (6.0 * self.scale) as i32;
-        let total_w = text.len() as i32 * char_w;
-        let sx = cx - total_w / 2;
+        let cy = self.ph as i32 / 3;
+        let title_scale = 1;
+        let title_w = flappy_logo_width(title_scale);
+        let title_h = FLAPPY_LOGO.len() as i32 * title_scale * 2;
+        let title_x = cx - title_w / 2;
 
-        for (i, _) in text.chars().enumerate() {
-            let bx = sx + i as i32 * char_w;
-            buf.fill_rect(bx, cy, char_w - 1, char_h, BIRD_Y);
-            buf.fill_rect(bx, cy, char_w - 1, 1, BIRD_HI);
-        }
+        draw_flappy_logo(buf, title_x, cy, title_scale);
 
-        // Subtitle
-        let sub_y = cy + char_h + 4;
+        // Subtitle in a white box with normal-size dark text.
         let msg = "SPACE TO FLAP";
-        let msg_w = msg.len() as i32 * 4;
-        let msg_x = cx - msg_w / 2;
-        for (i, ch) in msg.chars().enumerate() {
-            if ch == ' ' {
-                continue;
-            }
-            let bx = msg_x + i as i32 * 4;
-            // Simple 3-pixel-tall block for each char
-            buf.fill_rect(bx, sub_y, 3, 3, WHITE);
-        }
+        let msg_scale = 1;
+        let msg_w = text_width_4x6(msg, msg_scale);
+        let msg_h = 6 * msg_scale;
+        let pad_x = 2;
+        let pad_y = 1;
+        let box_w = msg_w + pad_x * 2;
+        let box_h = msg_h + pad_y * 2;
+        let box_x = cx - box_w / 2;
+        let box_y = cy + title_h + 4;
+
+        buf.fill_rect(box_x - 1, box_y - 1, box_w + 2, box_h + 2, SHADOW);
+        buf.fill_rect(box_x, box_y, box_w, box_h, WHITE);
+        draw_text_4x6(
+            buf,
+            box_x + pad_x,
+            box_y + pad_y,
+            msg,
+            BIRD_PUPIL,
+            msg_scale,
+        );
     }
 
     fn draw_game_over(&self, buf: &mut PixelBuf) {
