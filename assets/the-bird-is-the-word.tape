@@ -19,8 +19,8 @@ Type "flappy-tui"
 Enter
 Sleep 2s
 Type " "
-Sleep 760ms
-Type@620ms "     "
+Sleep 710ms
+Type@660ms "    "
 Sleep 2s
 Type "q"
 Ctrl+D
